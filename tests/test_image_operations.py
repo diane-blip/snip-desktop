@@ -34,8 +34,9 @@ class AnnotationTests(unittest.TestCase):
         base = Image.effect_noise((100, 100), 90).convert("RGB")
         result = render(base, [("blur", 10, 10, 80, 80)])
         self.assertEqual(result.size, base.size)
-        self.assertNotEqual(result.crop((10, 10, 80, 80)).tobytes(),
-                            base.crop((10, 10, 80, 80)).tobytes())
+        self.assertNotEqual(
+            result.crop((10, 10, 80, 80)).tobytes(), base.crop((10, 10, 80, 80)).tobytes()
+        )
 
 
 if __name__ == "__main__":

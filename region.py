@@ -5,11 +5,14 @@ the bright crop (Snipping Tool feel). Because the selection is cropped from the
 already-taken grab, there are no timing games and the overlay can never appear
 in the shot.
 """
+
 import tkinter as tk
 
 from PIL import Image, ImageEnhance, ImageTk
 
-BORDER = "#F0BDCE"  # softened brand pink
+from theme import ACCENT as BORDER
+from windows_ui import place
+
 DARKEN = 0.35
 
 
@@ -30,15 +33,18 @@ class RegionSelector:
         left, top = origin
         self.top = tk.Toplevel(root)
         self.top.overrideredirect(True)
-        self.top.geometry(f"{img.width}x{img.height}+{left}+{top}")
         self.top.attributes("-topmost", True)
         self.top.configure(cursor="crosshair")
 
         dark = ImageEnhance.Brightness(img).enhance(DARKEN)
         self.dark_photo = ImageTk.PhotoImage(dark)
         self.canvas = tk.Canvas(
-            self.top, width=img.width, height=img.height,
-            highlightthickness=0, bd=0, bg="#111111",
+            self.top,
+            width=img.width,
+            height=img.height,
+            highlightthickness=0,
+            bd=0,
+            bg="#111111",
         )
         self.canvas.pack(fill="both", expand=True)
         self.canvas.create_image(0, 0, anchor="nw", image=self.dark_photo)
@@ -49,13 +55,14 @@ class RegionSelector:
         self.top.bind("<Escape>", self.on_cancel)
         self.top.bind("<ButtonPress-3>", self.on_cancel)
 
+        place(self.top, img.width, img.height, left, top)
         self.top.focus_force()
         self.top.grab_set()
 
     # -- events ---------------------------------------------------------------
 
     def on_press(self, e):
-        self.start = (e.x, e.y)
+        self.start = (max(0, min(e.x, self.img.width)), max(0, min(e.y, self.img.height)))
 
     def on_move(self, e):
         if not self.start:
@@ -76,8 +83,12 @@ class RegionSelector:
         self.rect_id = self.canvas.create_rectangle(*box, outline=BORDER, width=2)
         label_y = box[1] - 22 if box[1] > 26 else box[3] + 6
         self.label_id = self.canvas.create_text(
-            box[0] + 4, label_y, anchor="nw",
-            text=f"{w} x {h}", fill=BORDER, font=("Segoe UI", 11, "bold"),
+            box[0] + 4,
+            label_y,
+            anchor="nw",
+            text=f"{w} x {h}",
+            fill=BORDER,
+            font=("Segoe UI", 11, "bold"),
         )
 
     def on_release(self, e):

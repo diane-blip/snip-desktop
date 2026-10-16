@@ -1,50 +1,45 @@
-"""Snip — screen capture for Diane.
+"""Snip: a single-session Windows capture utility.
 
-  Ctrl+Shift+S  the capture menu — every action one letter away:
-                   S snip · F full screen · A window · D scrolling
-                   U full web page · E annotate last · O open folder
-  Only Ctrl+Shift+S is registered globally; the tray icon also opens the menu.
-
-Every capture: PNG in the captures folder + copied to the clipboard + a toast.
-
-Threading: Tk owns the main thread (the region overlay and URL prompt need it);
-pystray runs detached; tray clicks post work onto the Tk
-thread through a queue. Slow work (full-page browser captures) runs in worker
-threads so the tray stays responsive.
+Tk owns all state and widgets. Tray and hotkey callbacks enqueue actions.
+Workers receive a configuration snapshot and return through the same queue.
 """
+
 import ctypes
-from ctypes import wintypes
 import io
 import logging
 import math
+import os
 import queue
-import re
 import struct
 import threading
+import tkinter as tk
 import wave
 import winsound
+from copy import deepcopy
+from ctypes import wintypes
+from logging.handlers import RotatingFileHandler
 
 import pystray
-import tkinter as tk
+import win32gui
 from PIL import Image, ImageDraw
 
-import clip
 import active_browser
+import clip
 import grab
 import save
 import scroll
 import settings
 import webpage
 from annotate import Annotator
+from hotkey import MenuHotkey
 from palette import Palette
 from region import RegionSelector
+from theme import BUSY as COLOR_BUSY
+from theme import IDLE as COLOR_IDLE
+from theme import TEXT as PAPER
+from url_prompt import URLPrompt
 
-COLOR_IDLE = "#8a8a8a"
-COLOR_BUSY = "#AD8326"
-PINK = "#F0BDCE"  # softened from brand #F49CBB (lighter, desaturated) at Di's request
-INK = "#111111"
-PAPER = "#FEFCFD"
-URL_RE = re.compile(r"^(https?://|www\.)\S+$", re.I)
+log = logging.getLogger("snip")
 
 
 def _make_soft_beep() -> bytes:
@@ -55,9 +50,9 @@ def _make_soft_beep() -> bytes:
     as a soft click instead of a shrill blip, and PlaySound plays it async.
     """
     rate = 44100
-    dur = 0.11          # seconds — short, a confirmation not a chime
-    freq = 523.25       # C5, lower and rounder than the old 880 Hz
-    amp = 0.22          # quiet
+    dur = 0.11  # seconds — short, a confirmation not a chime
+    freq = 523.25  # C5, lower and rounder than the old 880 Hz
+    amp = 0.22  # quiet
     n = int(rate * dur)
     fade = int(rate * 0.02)  # 20ms fade both ends removes the click/edge
     frames = bytearray()
@@ -76,189 +71,145 @@ def _make_soft_beep() -> bytes:
 
 _SOFT_BEEP = _make_soft_beep()
 
-# The app runs headless under pythonw, so errors are invisible without this.
-logging.basicConfig(
-    filename=settings.APP_DIR / "capture.log",
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-)
-log = logging.getLogger("capture")
-
-
-class MenuHotkey:
-    """One Windows-owned menu shortcut; no blocking keyboard hook."""
-    identifier = 0x534E
-    modifiers = 0x0002 | 0x0004 | 0x4000  # Ctrl, Shift, no auto-repeat.
-    key = 0x53
-
-    def __init__(self, callback):
-        self.callback = callback
-        self.ready = threading.Event()
-        self.stopping = threading.Event()
-        self.registered = False
-        self.error = None
-        self.thread_id = None
-        self.user32 = ctypes.WinDLL("user32", use_last_error=True)
-        self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        self.user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
-        self.user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
-        self.user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
-        self.user32.GetMessageW.restype = ctypes.c_int
-        self.user32.PeekMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT]
-        self.user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-        self.kernel32.GetCurrentThreadId.restype = wintypes.DWORD
-        self.thread = threading.Thread(target=self.run, daemon=True)
-        self.thread.start()
-        if not self.ready.wait(2):
-            self.close()
-            raise RuntimeError("Snip shortcut startup timed out.")
-        if self.error:
-            self.close()
-            raise RuntimeError(self.error)
-
-    def run(self):
-        self.thread_id = self.kernel32.GetCurrentThreadId()
-        message = wintypes.MSG()
-        self.user32.PeekMessageW(ctypes.byref(message), None, 0, 0, 0)
-        try:
-            if not self.user32.RegisterHotKey(None, self.identifier, self.modifiers, self.key):
-                self.error = f"Ctrl+Shift+S unavailable (Windows {ctypes.get_last_error()}). Use the Snip tray icon."
-                return
-            self.registered = True
-            self.ready.set()
-            while not self.stopping.is_set():
-                result = self.user32.GetMessageW(ctypes.byref(message), None, 0, 0)
-                if result <= 0:
-                    break
-                if message.message == 0x0312 and message.wParam == self.identifier:
-                    self.callback()  # Queue only; capture work runs on Tk's thread.
-        finally:
-            if self.registered:
-                self.user32.UnregisterHotKey(None, self.identifier)
-            self.registered = False
-            self.ready.set()
-
-    def close(self):
-        self.stopping.set()
-        self.ready.wait(2)
-        if self.thread.is_alive() and self.thread_id:
-            self.user32.PostThreadMessageW(self.thread_id, 0x0012, 0, 0)
-        self.thread.join(2)
-        if self.thread.is_alive():
-            raise RuntimeError("Snip shortcut thread did not stop.")
-
-# Physical pixels everywhere (overlay coordinates must match mss grabs).
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except Exception:
-    pass
-
 
 def _icon_image(color: str) -> Image.Image:
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle((6, 12, 58, 52), radius=10, fill=color)      # camera body
-    d.ellipse((22, 22, 42, 42), fill=PAPER)                          # lens
+    d.rounded_rectangle((6, 12, 58, 52), radius=10, fill=color)  # camera body
+    d.ellipse((22, 22, 42, 42), fill=PAPER)  # lens
     d.ellipse((27, 27, 37, 37), fill=color)
-    d.rectangle((24, 6, 40, 14), fill=color)                         # viewfinder bump
+    d.rectangle((24, 6, 40, 14), fill=color)  # viewfinder bump
     return img
 
 
 class App:
     def __init__(self):
         self.cfg = settings.load()
-        self.q: queue.Queue = queue.Queue()
-        self.page_busy = False
-        self.selector_open = False
-        self.scroll_busy = False
-        self.annotator_open = False
-        self.palette_open = False
-        self.fullpage_source_hwnd = None
+        self.q = queue.Queue()
+        self.state = "idle"
+        self.source_hwnd = None
         self.menu_hotkey = None
-
+        self.last_capture = None
         self.root = tk.Tk()
         self.root.withdraw()
-
         self.icon = pystray.Icon(
-            "capture", _icon_image(COLOR_IDLE),
-            "Snip · Ctrl+Shift+S or click for the menu",
+            "snip",
+            _icon_image(COLOR_IDLE),
+            "Snip: ready",
             menu=pystray.Menu(
                 pystray.MenuItem("Snip menu", lambda: self.post(self.do_menu), default=True),
-                pystray.MenuItem("Open captures folder", self.open_folder),
+                pystray.MenuItem("Open captures folder", lambda: self.post(self.open_folder)),
                 pystray.MenuItem("Annotate last capture", lambda: self.post(self.do_annotate)),
-                pystray.MenuItem("Snip full page…", lambda: self.post(lambda: self.do_fullpage(force_prompt=True))),
-                pystray.MenuItem("Open capture browser (log in to sites)", self.open_login_browser),
-                pystray.MenuItem("Open config", self.open_config),
-                pystray.MenuItem("Reload config", self.reload_config),
-                pystray.MenuItem("Quit", self.quit),
+                pystray.MenuItem("Capture web address…", lambda: self.post(self.prompt_page)),
+                pystray.MenuItem(
+                    "Open capture browser", lambda: self.post(self.open_login_browser)
+                ),
+                pystray.MenuItem("Open config", lambda: self.post(self.open_config)),
+                pystray.MenuItem("Reload config", lambda: self.post(self.reload_config)),
+                pystray.MenuItem("Quit", lambda: self.post(self.quit)),
             ),
         )
 
-    # -- plumbing --------------------------------------------------------------
-
-    def post(self, fn) -> None:
-        """Run fn on the Tk main thread."""
+    def post(self, fn):
         self.q.put(fn)
 
-    def poll(self) -> None:
-        # A raised exception here would end the after() chain and silently kill
-        # every hotkey, so each queued action is contained.
-        try:
-            while True:
+    def poll(self):
+        for _ in range(50):
+            try:
                 fn = self.q.get_nowait()
-                try:
-                    fn()
-                except Exception as e:
-                    log.exception("queued action failed")
-                    self.selector_open = False
-                    self.notify(f"Snip error: {e}")
-        except queue.Empty:
-            pass
-        self.root.after(40, self.poll)
+            except queue.Empty:
+                break
+            try:
+                fn()
+            except Exception as exc:
+                self.report_error("Action", exc)
+        if self.state != "closing":
+            self.root.after(40, self.poll)
 
-    def notify(self, message: str) -> None:
+    def notify(self, message):
         try:
             self.icon.notify(message, "Snip")
         except Exception:
             pass
 
-    def beep(self) -> None:
-        if self.cfg.get("sounds", True):
-            # winsound rejects SND_MEMORY + SND_ASYNC. Synchronous playback in
-            # a tiny daemon thread stays non-blocking and can never break save.
+    def report_error(self, action, exc):
+        # Provider exceptions can contain private URLs. Record type, not contents.
+        log.error("%s failed (%s)", action, type(exc).__name__)
+        message = (
+            str(exc) if isinstance(exc, ValueError) else f"{action} failed ({type(exc).__name__})."
+        )
+        self.notify(message + " Your existing files were kept.")
+
+    def set_state(self, state):
+        self.state = state
+        self.icon.icon = _icon_image(COLOR_IDLE if state == "idle" else COLOR_BUSY)
+        self.icon.title = f"Snip: {state}"
+
+    def available(self):
+        if self.state != "idle":
+            self.notify("Finish or close the current Snip action first.")
+            return False
+        return True
+
+    def beep(self):
+        if self.cfg["sounds"]:
+
             def play():
                 try:
                     winsound.PlaySound(_SOFT_BEEP, winsound.SND_MEMORY)
-                except Exception as exc:
-                    log.warning("confirmation sound failed: %s", exc)
+                except RuntimeError:
+                    log.warning("Confirmation sound unavailable")
+
             threading.Thread(target=play, daemon=True).start()
 
-    def set_busy(self, busy: bool) -> None:
-        self.icon.icon = _icon_image(COLOR_BUSY if busy else COLOR_IDLE)
-
-    def finish_capture(self, img: Image.Image, kind: str, label: str | None = None) -> None:
-        path = save.save_png(img, kind, self.cfg["resolved_save_dir"], label)
-        clip_note = ""
-        if self.cfg.get("copy_to_clipboard", True):
-            if img.height <= self.cfg.get("clipboard_max_height", 8000):
-                try:
-                    clip.copy_image(img)
-                    clip_note = " · on clipboard"
-                except Exception:
-                    clip_note = " · clipboard busy, file saved"
+    def saved(self, path, image, cfg):
+        self.last_capture = path
+        note = ""
+        if cfg["copy_to_clipboard"]:
+            if image.height > cfg["clipboard_max_height"]:
+                note = " · too tall for clipboard, file saved"
             else:
-                clip_note = " · too tall for clipboard, file saved"
+                try:
+                    clip.copy_image(image)
+                    note = " · on clipboard"
+                except Exception:
+                    note = " · clipboard unavailable, file saved"
         self.beep()
-        self.notify(f"{path.name}{clip_note}")
+        self.notify(path.name + note)
 
-    # -- capture modes (run on the Tk thread) -----------------------------------
+    def finish_capture(self, image, kind, cfg=None):
+        cfg = cfg or self.cfg
+        path = save.save_png(image, kind, cfg["resolved_save_dir"])
+        self.saved(path, image, cfg)
 
-    def do_menu(self) -> None:
-        """The pop-up palette: one hotkey, every capture one letter away."""
-        if self.palette_open:
+    def job(self, name, work, complete=None):
+        if not self.available():
             return
-        self.palette_open = True
-        self.fullpage_source_hwnd = active_browser.foreground_browser()
+        cfg = deepcopy(self.cfg)
+        self.set_state(name)
+
+        def worker():
+            try:
+                result, error = work(cfg), None
+            except Exception as exc:
+                result, error = None, exc
+
+            def finish():
+                self.set_state("idle")
+                if error is not None:
+                    self.report_error(name, error)
+                elif complete:
+                    complete(result, cfg)
+
+            self.post(finish)
+
+        threading.Thread(target=worker, name=f"snip-{name}", daemon=False).start()
+
+    def do_menu(self):
+        if not self.available():
+            return
+        self.source_hwnd = win32gui.GetForegroundWindow()
+        self.set_state("menu")
         actions = [
             ("s", "Snip a region", self.do_region),
             ("f", "Full screen", self.do_fullscreen),
@@ -269,269 +220,254 @@ class App:
             ("o", "Open captures folder", self.open_folder),
         ]
 
-        def picked(cb):
-            self.palette_open = False
-            if cb is not None:
-                log.info("palette pick: %s", cb.__name__)
-                # Let the palette vanish before any screen grab or focus check,
-                # so it can't appear in the shot or steal the "active window".
-                self.root.after(230, cb)
-
-        Palette(self.root, actions, picked)
-
-    def do_region(self) -> None:
-        if self.selector_open:
-            return
-        self.selector_open = True
-        img, origin = grab.virtual_screen()
-
-        def done(result):
-            self.selector_open = False
-            if result is not None:
-                cropped, _box = result
-                self.finish_capture(cropped, "snip")
-
-        RegionSelector(self.root, img, origin, done)
-
-    def do_scroll(self) -> None:
-        """Select an area, then the app scrolls it and stitches one tall image."""
-        if self.selector_open or self.scroll_busy:
-            return
-        self.selector_open = True
-        img, origin = grab.virtual_screen()
-
-        def done(result):
-            self.selector_open = False
-            if result is None:
-                return
-            _cropped, box = result
-            bbox = (box[0] + origin[0], box[1] + origin[1],
-                    box[2] + origin[0], box[3] + origin[1])
-            self.scroll_busy = True
-            self.set_busy(True)
-            self.notify("Scrolling capture running — hands off, Esc to stop")
-
-            def work():
-                try:
-                    stitched = scroll.capture_scrolling(bbox, self.cfg)
-                    if stitched is None:
-                        self.notify("Scrolling capture: area too small")
-                    else:
-                        self.post(lambda: self.finish_capture(stitched, "scroll"))
-                except Exception as e:
-                    log.exception("scrolling capture failed")
-                    self.notify(f"Scrolling capture failed: {e}")
-                finally:
-                    self.scroll_busy = False
-                    self.post(lambda: self.set_busy(False))
-
-            threading.Thread(target=work, daemon=True).start()
-
-        RegionSelector(self.root, img, origin, done)
-
-    def do_annotate(self) -> None:
-        if self.annotator_open:
-            return
-        pngs = sorted(self.cfg["resolved_save_dir"].glob("*.png"),
-                      key=lambda p: p.stat().st_mtime)
-        if not pngs:
-            self.notify("No captures to annotate yet")
-            return
-        self.annotator_open = True
-
-        def closed():
-            self.annotator_open = False
+        def picked(callback):
+            self.set_state("idle")
+            if callback:
+                self.root.after(230, lambda: self.post(callback))
 
         try:
-            Annotator(self.root, pngs[-1], self.notify, on_close=closed)
+            Palette(self.root, actions, picked)
         except Exception:
-            self.annotator_open = False
+            self.set_state("idle")
             raise
 
-    def do_fullscreen(self) -> None:
-        img, _ = grab.virtual_screen()
-        self.finish_capture(img, "screen")
-
-    def do_window(self) -> None:
-        img = grab.grab_window()
-        if img is None:
-            self.notify("No window to capture")
+    def select(self, complete):
+        if not self.available():
             return
-        self.finish_capture(img, "window")
-
-    def do_fullpage(self, force_prompt: bool = False) -> None:
-        if self.page_busy:
-            self.notify("A full-page capture is already running")
-            return
-        if force_prompt:
-            url = self.ask_url()
-        else:
-            source = self.fullpage_source_hwnd or active_browser.foreground_browser()
-            self.fullpage_source_hwnd = None
-            url = active_browser.read_url(source)
-            if not url:
-                self.notify("Open the web page in Chrome, Edge, Brave, or Firefox, then try Full page again")
-                return
-        if not url:
-            return
-        if url.lower().startswith("www."):
-            url = "https://" + url
-
-        self.page_busy = True
-        self.set_busy(True)
-        self.notify(f"Capturing full page: {url}")
-
-        def work():
-            target = None
-            try:
-                target = save.next_path("page", self.cfg["resolved_save_dir"], url)
-                webpage.capture_page(url, target, self.cfg)
-                with Image.open(target) as opened:
-                    page_img = opened.copy()
-                clip_note = ""
-                if (self.cfg.get("copy_to_clipboard", True)
-                        and page_img.height <= self.cfg.get("clipboard_max_height", 8000)):
-                    try:
-                        clip.copy_image(page_img)
-                        clip_note = " · on clipboard"
-                    except Exception:
-                        clip_note = ""
-                elif self.cfg.get("copy_to_clipboard", True):
-                    clip_note = " · too tall for clipboard, file saved"
-                self.beep()
-                self.notify(f"{target.name}{clip_note}")
-            except Exception as e:
-                log.exception("full-page capture failed for %s", url)
-                try:
-                    if target is not None and target.exists():
-                        target.unlink()
-                except Exception:
-                    pass
-                self.notify(f"Full-page capture failed: {e}")
-            finally:
-                self.page_busy = False
-                self.post(lambda: self.set_busy(False))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def ask_url(self) -> str | None:
-        """Small dark URL prompt (dark mode always — bright white gives Di headaches)."""
-        result = {"url": None}
-        top = tk.Toplevel(self.root)
-        top.title("Snip full page")
-        top.configure(bg=INK, padx=18, pady=16)
-        top.attributes("-topmost", True)
-        top.resizable(False, False)
-
-        tk.Label(top, text="Web page URL", bg=INK, fg=PAPER,
-                 font=("Segoe UI", 11)).pack(anchor="w")
-        entry = tk.Entry(top, width=58, bg="#221f20", fg=PAPER, insertbackground=PINK,
-                         relief="flat", font=("Segoe UI", 11))
-        entry.pack(pady=(6, 12), ipady=5)
+        self.set_state("selecting")
         try:
-            import pyperclip
-            text = (pyperclip.paste() or "").strip()
-            if URL_RE.match(text):
-                entry.insert(0, text)
+            image, origin = grab.virtual_screen(self.cfg["max_pixels"])
+
+            def selected(result):
+                self.set_state("idle")
+                if result:
+                    try:
+                        complete(result, origin)
+                    except Exception as exc:
+                        self.report_error("Capture", exc)
+
+            RegionSelector(self.root, image, origin, selected)
         except Exception:
-            pass
+            self.set_state("idle")
+            raise
 
-        def ok(_e=None):
-            result["url"] = entry.get().strip() or None
-            top.destroy()
+    def do_region(self):
+        self.select(lambda result, origin: self.finish_capture(result[0], "snip"))
 
-        def cancel(_e=None):
-            top.destroy()
+    def do_fullscreen(self):
+        if self.available():
+            image, _ = grab.virtual_screen(self.cfg["max_pixels"])
+            self.finish_capture(image, "screen")
 
-        row = tk.Frame(top, bg=INK)
-        row.pack(anchor="e")
-        tk.Button(row, text="Cancel", command=cancel, bg="#221f20", fg=PAPER,
-                  relief="flat", padx=14, pady=4).pack(side="left", padx=(0, 8))
-        tk.Button(row, text="Capture", command=ok, bg=PINK, fg=INK,
-                  relief="flat", padx=14, pady=4, font=("Segoe UI", 10, "bold")).pack(side="left")
-        top.bind("<Return>", ok)
-        top.bind("<Escape>", cancel)
-
-        top.update_idletasks()
-        x = (top.winfo_screenwidth() - top.winfo_width()) // 2
-        y = (top.winfo_screenheight() - top.winfo_height()) // 3
-        top.geometry(f"+{x}+{y}")
-        entry.focus_force()
-        top.grab_set()
-        self.root.wait_window(top)
-        return result["url"]
-
-    # -- tray menu (called on pystray's thread) -----------------------------------
-
-    def open_folder(self) -> None:
-        d = self.cfg["resolved_save_dir"]
-        d.mkdir(parents=True, exist_ok=True)
-        import os
-        os.startfile(d)
-
-    def open_config(self) -> None:
-        import os
-        os.startfile(settings.APP_DIR / "config.toml")
-
-    def open_login_browser(self) -> None:
-        if self.page_busy:
-            self.notify("Wait for the current page capture to finish")
+    def do_window(self):
+        if not self.available():
             return
-        self.notify("Opening the capture browser — log in, then close the window")
+        hwnd = self.source_hwnd or win32gui.GetForegroundWindow()
+        self.source_hwnd = None
+        if not win32gui.IsWindow(hwnd):
+            self.notify("The selected window has closed.")
+            return
+        # A screenshot is visible pixels, not hidden or minimized window contents.
+        try:
+            win32gui.SetForegroundWindow(hwnd)
+        except Exception:
+            self.notify("Select the window again and retry.")
+            return
+        self.set_state("window")
 
-        def work():
-            self.page_busy = True
+        def capture_window():
             try:
-                webpage.open_login_browser(self.cfg)
-                self.notify("Logins saved for future captures")
-            except Exception as e:
-                self.notify(f"Browser error: {e}")
+                if win32gui.GetForegroundWindow() != hwnd:
+                    raise ValueError("The selected window is no longer in front; retry.")
+                image = grab.grab_window(hwnd, self.cfg["max_pixels"])
+                if image is None:
+                    raise ValueError("The selected window has no visible capture area.")
+                self.finish_capture(image, "window")
             finally:
-                self.page_busy = False
+                self.set_state("idle")
 
-        threading.Thread(target=work, daemon=True).start()
+        self.root.after(150, lambda: self.post(capture_window))
 
-    def reload_config(self) -> None:
-        self.cfg = settings.load()
-        self.notify("Config reloaded")
+    def do_scroll(self):
+        target = self.source_hwnd or win32gui.GetForegroundWindow()
+        self.source_hwnd = None
 
-    def quit(self) -> None:
-        if self.menu_hotkey:
-            self.menu_hotkey.close()
-        self.icon.stop()
-        self.post(self.root.quit)
+        def selected(result, origin):
+            _, box = result
+            bbox = (box[0] + origin[0], box[1] + origin[1], box[2] + origin[0], box[3] + origin[1])
+            try:
+                win32gui.SetForegroundWindow(target)
+            except Exception:
+                self.notify("Select the scrollable window again and retry.")
+                return
+            self.notify("Scrolling capture: Esc or move the pointer to stop.")
 
-    # -- wiring -----------------------------------------------------------------
+            def complete(image, cfg):
+                if image is None:
+                    self.notify("Select an area at least 40 pixels wide and 240 pixels tall.")
+                else:
+                    self.finish_capture(image, "scroll", cfg)
 
-    def run(self) -> None:
+            self.job("scrolling", lambda cfg: scroll.capture_scrolling(bbox, cfg), complete)
+
+        self.select(selected)
+
+    def do_fullpage(self):
+        hwnd = self.source_hwnd or active_browser.foreground_browser()
+        self.source_hwnd = None
+
+        def ready(url, _cfg):
+            if url:
+                self.capture_url(url)
+            else:
+                self.prompt_page()
+
+        self.job("reading address", lambda cfg: active_browser.read_url(hwnd), ready)
+
+    def prompt_page(self):
+        if not self.available():
+            return
+        self.set_state("web address")
+        try:
+            url = URLPrompt(self.root).show()
+        finally:
+            self.set_state("idle")
+        if url:
+            self.capture_url(url)
+
+    def capture_url(self, url):
+        def work(cfg):
+            target = save.next_path("page", cfg["resolved_save_dir"])
+            return webpage.capture_page(url, target, cfg)
+
+        def complete(path, cfg):
+            with Image.open(path) as image:
+                self.saved(path, image, cfg)
+
+        self.job("web capture", work, complete)
+
+    def do_annotate(self):
+        if not self.available():
+            return
+        path = self.last_capture
+        if path is None or not path.exists():
+            path = max(
+                self.cfg["resolved_save_dir"].glob("*.png"),
+                key=lambda p: p.stat().st_mtime,
+                default=None,
+            )
+        if path is None:
+            self.notify("No captures yet. Make a capture first.")
+            return
+        self.set_state("annotating")
+        try:
+            Annotator(
+                self.root,
+                path,
+                self.notify,
+                on_close=lambda: self.set_state("idle"),
+                cfg=deepcopy(self.cfg),
+            )
+        except Exception:
+            self.set_state("idle")
+            raise
+
+    def open_login_browser(self):
+        self.job(
+            "capture browser",
+            webpage.open_login_browser,
+            lambda result, cfg: self.notify("Capture browser closed. Local sessions retained."),
+        )
+
+    def open_folder(self):
+        folder = self.cfg["resolved_save_dir"]
+        folder.mkdir(parents=True, exist_ok=True)
+        os.startfile(folder)
+
+    def open_config(self):
+        local = settings.APP_DIR / "config.local.toml"
+        if not local.exists():
+            local.write_text("# Override config.toml defaults here.\n", encoding="utf-8")
+        os.startfile(local)
+
+    def reload_config(self):
+        if self.available():
+            self.cfg = settings.load()
+            self.notify("Configuration reloaded.")
+
+    def quit(self):
+        if not self.available():
+            return
+        self.set_state("closing")
+        self.root.quit()
+
+    def run(self, register_hotkey=True):
         self.icon.run_detached()
         self.poll()
         try:
-            self.menu_hotkey = MenuHotkey(lambda: self.post(self.do_menu))
-            log.info("capture started (only global shortcut: Ctrl+Shift+S; Windows registration)")
-        except RuntimeError as exc:
-            log.error("menu shortcut: %s", exc)
-            self.notify(str(exc))
-        try:
+            if register_hotkey:
+                try:
+                    self.menu_hotkey = MenuHotkey(lambda: self.post(self.do_menu))
+                except RuntimeError as exc:
+                    self.notify(str(exc))
+            log.info("started")
             self.root.mainloop()
         finally:
             if self.menu_hotkey:
                 self.menu_hotkey.close()
-        log.info("capture exiting")
+            self.icon.stop()
+            self.root.destroy()
+            log.info("stopped")
 
 
-def _already_running() -> bool:
-    """Single-instance guard: two instances double-handle every hotkey."""
-    ctypes.windll.kernel32.CreateMutexW(None, False, "SwayRise.Capture.SingleInstance")
-    return ctypes.windll.kernel32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
+class InstanceGuard:
+    """Keep the legacy name so installed and public editions cannot compete."""
+
+    def __init__(self):
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
+        kernel.CreateMutexW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        self.kernel = kernel
+        self.handle = kernel.CreateMutexW(None, False, "SwayRise.Capture.SingleInstance")
+        if not self.handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        self.already_running = ctypes.get_last_error() == 183
+
+    def close(self):
+        if self.handle:
+            self.kernel.CloseHandle(self.handle)
+            self.handle = None
+
+
+def main():
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except OSError:
+        pass
+    handler = RotatingFileHandler(
+        settings.APP_DIR / "capture.log", maxBytes=1000000, backupCount=2, encoding="utf-8"
+    )
+    logging.basicConfig(
+        handlers=[handler], level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
+    guard = InstanceGuard()
+    try:
+        if guard.already_running:
+            ctypes.windll.user32.MessageBoxW(
+                None, "Snip is already running. Use its tray icon.", "Snip", 0x40
+            )
+            return
+        App().run()
+    except Exception as exc:
+        log.error("Startup failed (%s)", type(exc).__name__)
+        ctypes.windll.user32.MessageBoxW(
+            None, "Snip could not start. Check config.local.toml and capture.log.", "Snip", 0x10
+        )
+        raise
+    finally:
+        guard.close()
 
 
 if __name__ == "__main__":
-    if _already_running():
-        log.info("another instance is already running; exiting")
-    else:
-        try:
-            App().run()
-        except Exception:
-            log.exception("fatal startup error")
-            raise
+    main()

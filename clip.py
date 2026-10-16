@@ -1,5 +1,6 @@
 """Copy a PIL image to the Windows clipboard as a DIB (what Paint, Word,
 browsers, Slack etc. all paste)."""
+
 import io
 import time
 

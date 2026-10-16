@@ -1,64 +1,98 @@
-# Capture
+# Snip
 
-Screen capture for Windows. Ctrl+Shift+S opens the Snip menu; every capture lands as a PNG in `Pictures\Captures` AND on the clipboard, with a toast confirming.
+A Windows tray tool for screenshots, scrolling captures and full web pages. Save a PNG, copy it to the clipboard, and add arrows, boxes, blur or opaque redaction.
 
-Lives at `projects/capture/` in the vault (gitignored, own repo `diane-blip/capture`). Vault card: `projects/capture.md`.
+**[Download Snip 0.1.0](https://github.com/diane-blip/snip-desktop/releases/tag/v0.1.0)** · Windows x64 · Python 3.12 · MIT license
 
-## Open the menu with Ctrl+Shift+S
+This is a source release with a setup script. It requires Python and downloads its dependencies and a separate Chromium browser. There is no standalone executable or macOS build.
 
-Press **Ctrl+Shift+S** or left-click the Snip tray icon to open the **capture menu**. Choose an action with a click or its letter while the menu is open:
+![Snip's native capture menu](docs/images/menu.png)
 
-| Letter | Action |
-|---|---|
-| **S** | Snip a region — screen freezes and darkens, drag a rectangle. Esc or right-click cancels. |
-| **F** | Full screen (all monitors) |
-| **A** | The active window |
-| **D** | Scrolling capture — select the scrolling area, then hands off: the app scrolls it and stitches one tall image. Esc stops early (keeps what it has). |
-| **U** | Entire web page, top to bottom (the GoFullPage replacement) |
-| **E** | Annotate the last capture — arrows, boxes, blur |
-| **O** | Open the captures folder |
+## Install
 
-**Ctrl+Shift+S is the only global Snip shortcut.** Windows owns this registration, which is released on quit; a conflict is reported rather than stolen. No blocking keyboard hook is installed. The old Ctrl+Shift+F/A/U/D/E bindings remain removed. Ctrl+Shift+S belongs to Snip while running; other shortcuts remain available to their foreground apps.
+1. Install **64-bit Python 3.12** from [python.org](https://www.python.org/downloads/windows/), including the Python launcher and Tcl/Tk.
+2. Download `Snip-0.1.0-source.zip` and `SHA256SUMS.txt` from the release. Check the ZIP's SHA-256 against the published file:
 
-Full-page capture reads the address from the active Chrome, Edge, Brave, or Firefox tab. Open the page and choose **Full web page**; there is nothing to copy or type. The tray menu's **Snip full page…** item keeps a manual URL box as a fallback when you deliberately want to capture a page that is not open.
+   ```powershell
+   Get-FileHash .\Snip-0.1.0-source.zip -Algorithm SHA256
+   ```
 
-## Scrolling capture
+3. Extract the ZIP to a permanent, writable folder. Open PowerShell in the extracted `Snip-0.1.0` folder and run:
 
-For anything scrollable that isn't a URL — a PDF, a long Obsidian note, Slack, an email thread. Select just the area that scrolls (leave out fixed headers/sidebars), then don't touch the mouse or keyboard: the app scrolls the area itself, watches how far the content moves, and stitches only the new rows into one tall PNG. It stops on its own at the bottom, or press Esc to stop early and keep what it has.
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-machine.ps1
+   .\.venv\Scripts\python.exe capture.py
+   ```
 
-Tips: select only the scrolling content, not the whole window. Content that animates while scrolling, or large stretches of completely blank space, can confuse the stitcher and end the capture early — scroll captures of mostly-blank areas are its known weak spot.
+The execution-policy override applies only to that installer process. Setup creates `.venv`, installs hash-locked packages and downloads Chromium inside that environment. It does not start the app, change an existing installation or add startup shortcuts. Expect several hundred MB of downloads and allow roughly 1 GB of free disk space.
 
-## Annotating
+To run without a console after the first successful start:
 
-Opens your most recent capture in a small dark editor: **Arrow**, **Box** (both brand pink), and **Blur** (drag over anything you want unreadable). Ctrl+Z undoes. "Save + copy" writes `<name>-annotated.png` next to the original and puts it on your clipboard — the original stays untouched. Also available from the tray menu.
+```powershell
+Start-Process -WindowStyle Hidden -FilePath .\.venv\Scripts\pythonw.exe -ArgumentList 'capture.py' -WorkingDirectory (Get-Location).Path
+```
 
-## Logged-in pages
+Only one Snip instance can run. An older installed copy also holds this lock; keep using it or quit it deliberately before starting another edition. Installing the public release never stops it for you.
 
-The full-page browser keeps its own profile, separate from Chrome. For a page behind a login (client dashboards, Cloudflare, Kit):
+## Capture
 
-1. Tray icon → **"Open capture browser (log in to sites)"**
-2. Log into the site in the window that opens, then close it.
-3. Capture the URL as usual — it's logged in from now on.
+Press **Ctrl+Shift+S** or open **Snip menu** from the tray. Use the letter shown, click an action, or move focus with Tab/arrow keys and press Enter. Esc closes the menu.
 
-## Setup (per machine)
+| Key | Action | Behavior |
+| --- | --- | --- |
+| S | Snip a region | Drag a rectangle on a frozen desktop image. Esc or right-click cancels. |
+| F | Full screen | Capture the entire virtual desktop, including all monitors. |
+| A | Active window | Capture visible pixels of the window selected before opening the menu. |
+| D | Scrolling capture | Select the scrollable content area. Snip scrolls and joins overlapping frames. |
+| U | Full web page | Read the selected browser's URL when available; otherwise ask for the address. |
+| E | Annotate last capture | Open the last capture, or the newest PNG in the capture folder after a restart. |
+| O | Open captures folder | Open the destination in Explorer. |
 
-Run `setup-machine.ps1`. It creates the local environment if needed, installs
-the pinned dependencies and matching Chromium engine, and adds Capture to
-Windows startup. Rerun it after pulling an update if Full Page reports that its
-browser executable is missing.
+Captures save to `~/Pictures/Snip` by default. A successful save happens before clipboard copy. If the clipboard is busy or the image is too tall, the PNG is still kept. One capture or editor session runs at a time; finish or close it before starting another action or quitting.
 
-No API keys needed. Run it: double-click `start-capture.vbs` (silent) or `.venv\Scripts\python.exe capture.py` (with console, for debugging).
+### Scrolling captures
 
-Start with Windows is included in `setup-machine.ps1`; `setup-startup.ps1` can
-still repair only the shortcut.
+Choose only the scrollable content, excluding fixed headers, sidebars and scrollbars. The selected application must stay in front. Press **Esc**, move the pointer or switch windows to stop; Snip saves the portion captured so far. Captures also stop at the bottom, configured limits or unreliable alignment. Check the result before sharing: animation, repeated blank regions and sticky content can prevent a complete stitch. Reduce `scroll.wheel_ticks` if it stops too early.
 
-## Config
+### Web pages and sign-in
 
-`config.toml` — save folder, clipboard behavior, full-page viewport width and timeouts. Tray menu has "Reload config".
+Web captures render in Snip's separate Chromium browser, so they can differ from the page in your everyday browser. URL lookup uses Windows accessibility APIs without touching the clipboard. If the address is unavailable, paste or type it in the prompt. **Capture web address…** in the tray always opens that prompt.
 
-## Known limitations
+For pages requiring sign-in, choose **Open capture browser**, sign in there, then close every capture-browser window before capturing. Sessions stay in this installation's `browser-profile/`. Sites can reject automated browsing. HTTP errors, timeouts and oversized pages produce no final PNG; use a region or scrolling capture when full-page capture cannot finish.
 
-- Scrolling capture assumes vertical scrolling and static content; animated GIFs/videos in the selected area, sticky elements inside the selection, or long blank stretches can end it early or leave a visible seam. For web pages use Full web page in the Snip menu.
-- Very tall PNGs (over `clipboard_max_height`, default 8000px) are saved to file but not copied to the clipboard, so pasting stays fast.
-- Mixed-DPI multi-monitor setups (e.g. a scaled laptop plus an unscaled external) may offset the snip overlay; single displays and matched scaling are fine.
-- Sites with aggressive bot protection may show a challenge page to the capture browser; log in via "Open capture browser" first, which usually clears it.
+### Annotate
+
+Choose Arrow, Box, Blur or Redact, then drag on the image. **Undo** or **Ctrl+Z** removes the last operation. **Save + copy** or **Ctrl+S** creates a new PNG; when clipboard copy is disabled, the button reads **Save PNG**. Scroll to reach a tall or wide image. Esc or closing the editor asks before discarding edits.
+
+**Redact covers the selected pixels with solid black in the exported PNG. Blur only softens them.** The original image stays on disk. Inspect the export, and share that file rather than the original. See [privacy and redaction boundaries](SECURITY.md).
+
+## Settings, startup and removal
+
+Choose **Open config** in the tray to edit `config.local.toml`; **Reload config** applies valid settings while idle. See [all settings and limits](docs/configuration.md).
+
+Optional desktop and sign-in shortcuts:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-startup.ps1
+```
+
+Remove this installation's shortcuts:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-startup.ps1 -Remove
+```
+
+The script owns `Snip Desktop.lnk`. It refuses to replace a shortcut belonging to another installation and does not touch older `Capture.lnk` shortcuts. To uninstall, remove these shortcuts, quit Snip, then delete its installation folder. Your captures remain in their save folder. Removing the installation folder deletes its separate browser sessions; it does not clear Windows clipboard history.
+
+For an update, keep the old folder until the new release works. Install the new ZIP separately, copy only your intended `config.local.toml` overrides, and quit the old app before starting the new one. Re-create optional shortcuts after removing the old installation's owned shortcuts. Do not copy `.venv` or publish a browser profile.
+
+## Troubleshooting and limits
+
+- **Shortcut unavailable:** another app owns Ctrl+Shift+S. Use Snip's tray menu or resolve that conflict in the other app. Snip does not intercept all keyboard input.
+- **No visible window at startup:** Snip lives in the tray, sometimes under Windows' hidden-icons arrow. Run the console command above to see startup errors; check `capture.log` and local configuration.
+- **Browser missing:** rerun `setup-machine.ps1` in this installation. Its private Chromium must match its Playwright version.
+- **No notification:** Windows can hide tray notifications. Check the capture folder; notifications are not the file itself.
+- **Black/protected content:** secure desktop, DRM surfaces, minimized windows and some GPU-rendered content cannot be captured reliably. Snip captures visible pixels and does not bypass protection.
+- **Displays:** negative desktop origins are supported. Mixed-DPI multi-monitor hardware and screen-reader operation have not been fully verified. This release targets Windows x64 with Python 3.12; Windows 11 is the locally tested desktop.
+
+[Development and architecture](CONTRIBUTING.md) · [Verification](docs/verification.md) · [Changelog](CHANGELOG.md) · [Credits](AUTHORS.md) · [License](LICENSE)

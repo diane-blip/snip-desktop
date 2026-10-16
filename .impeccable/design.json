@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-15T21:24:56.2968614-05:00",
+  "title": "Design System: Snip",
+  "extensions": {
+    "platform": "Windows / Python Tkinter",
+    "sourceFiles": [
+      "PRODUCT.md",
+      "theme.py",
+      "palette.py",
+      "region.py",
+      "url_prompt.py",
+      "annotate.py",
+      "windows_ui.py"
+    ],
+    "colorMeta": {
+      "surface": {
+        "role": "neutral",
+        "displayName": "Dark gray surface"
+      },
+      "row": {
+        "role": "neutral",
+        "displayName": "Control gray"
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "Active gray"
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "White text"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted gray text"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Pale teal"
+      },
+      "markup": {
+        "role": "secondary",
+        "displayName": "Annotation blue"
+      },
+      "redaction": {
+        "role": "neutral",
+        "displayName": "Opaque redaction black"
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Palette title",
+        "purpose": "Snip name in the capture palette."
+      },
+      "dialog-title": {
+        "displayName": "Dialog heading",
+        "purpose": "Web page URL heading."
+      },
+      "input": {
+        "displayName": "Entry text",
+        "purpose": "Editable web address."
+      },
+      "body": {
+        "displayName": "Control and guidance text",
+        "purpose": "Buttons, instructions and validation."
+      },
+      "selection-label": {
+        "displayName": "Selection dimensions",
+        "purpose": "Live region width and height."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [],
+    "nativeConventions": {
+      "units": "Tk positive font sizes are points; geometry, padding and highlight thickness are pixels. Actual rendering depends on Windows/Tk scaling.",
+      "buttonFocus": "takefocus=True; highlightthickness=2; highlightcolor=ACCENT; highlightbackground=SURFACE",
+      "buttonRelief": "flat, borderwidth=0; selected annotation tool uses sunken relief",
+      "urlReturn": "Entry and Capture submit; focused Cancel cancels. Escape cancels.",
+      "editorNavigation": "Both native scrollbars; canvasx/canvasy preserve drawing coordinates after scrolling. Ctrl+Z, Ctrl+S and Escape are bound.",
+      "region": "35% background brightness, undimmed selection, 2px accent outline, crosshair; Escape and right-click cancel.",
+      "previewPolicy": "Native Tk components are documented as descriptions, not fabricated HTML/CSS replicas. No HTML/CSS detector or browser-rendered accessibility claim applies.",
+      "tokenPolicy": "Primitives live in DESIGN.md. No synthetic tonal ramps, motion tokens or breakpoints are asserted as implementation.",
+      "accessibilityLimit": "Focus and shortcuts are implemented. Region selection and drawing remain pointer operations. Screen-reader support and standards conformance have not been established."
+    },
+    "evidence": {
+      "captures": [
+        ".impeccable/review/palette.png",
+        ".impeccable/review/palette-small.png",
+        ".impeccable/review/url.png",
+        ".impeccable/review/url-error.png",
+        ".impeccable/review/annotator.png",
+        ".impeccable/review/annotator-small.png",
+        ".impeccable/review/annotator-narrow.png",
+        ".impeccable/review/region.png"
+      ],
+      "checked": "Read the listed implementation files and inspected all eight supplied captures. Source includes horizontal editor scrolling with canvas-relative coordinates and distinct Return bindings for URL Cancel and Capture. This documentation is not a new finish-review disposition."
+    }
+  },
+  "components": [
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Native focusable Tk button for Cancel, palette actions, tools and Undo; flat relief and a 2px accent focus highlight."
+    },
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Native teal Capture or Save button; label names the operation."
+    },
+    {
+      "name": "URL field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Native single-line entry with a visible focus highlight, insertion cursor, instructions and inline validation."
+    },
+    {
+      "name": "Selected annotation tool",
+      "kind": "button",
+      "refersTo": "tool-selected",
+      "description": "Teal fill plus sunken relief identify the current Arrow, Box, Blur or Redact tool."
+    },
+    {
+      "name": "Capture palette",
+      "kind": "custom",
+      "description": "Borderless pointer-positioned palette with full-width labeled actions, letter shortcuts, arrow-key traversal and focus-driven scrolling."
+    },
+    {
+      "name": "Annotation canvas",
+      "kind": "custom",
+      "description": "Image-preserving canvas with vertical and horizontal native scrollbars; coordinates account for scrolling."
+    },
+    {
+      "name": "Region selector",
+      "kind": "custom",
+      "description": "Dimmed screenshot overlay reveals a bright rectangular selection and live dimensions during pointer drag."
+    }
+  ],
+  "narrative": {
+    "northStar": "Native Windows, task first",
+    "overview": "Dark neutral surfaces, white text and restrained teal/blue support capture and annotation. Segoe UI, labeled controls and visible focus carry the interface. This is a Windows Tkinter app; native window chrome and scrollbars remain platform controls.",
+    "keyCharacteristics": [
+      "Compact, rectangular controls.",
+      "Teal identifies primary actions, selected tools and keyboard focus.",
+      "Blue marks annotations; captured images retain their own colors.",
+      "No personal or Sway Rise Creative branding."
+    ],
+    "rules": [],
+    "dos": [
+      "Do reuse the shared theme and button styles.",
+      "Do preserve labeled actions, visible focus and keyboard cancellation.",
+      "Do keep the image accessible through both scrollbars when the editor is narrowed.",
+      "Do retain the captured image's colors and distinguish Blur from Redact in text."
+    ],
+    "donts": [
+      "Don't introduce personal or SRC branding.",
+      "Don't add decorative fonts, gradients or bespoke window chrome.",
+      "Don't let a dialog-wide Return handler override the focused Cancel button.",
+      "Don't describe native Tk behavior as HTML/CSS or claim untested accessibility compliance."
+    ]
+  }
+}
