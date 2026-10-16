@@ -1,0 +1,23 @@
+# Capture configuration. Use the tray menu's "Reload config" after editing.
+
+# Where PNGs land. ~ expands to C:\Users\diane.
+save_dir = "~/Pictures/Captures"
+
+# Also copy every capture to the clipboard (skipped for images taller than
+# clipboard_max_height, so an enormous full-page PNG doesn't choke pasting).
+copy_to_clipboard = true
+clipboard_max_height = 8000
+
+# Soft beep on every successful capture.
+sounds = true
+
+[scroll]
+wheel_ticks = 4        # scroll amount per step (wheel clicks)
+settle_ms = 450        # wait after each scroll for smooth-scroll animations
+max_height = 20000     # stop stitching past this many pixels tall
+max_steps = 80         # safety cap on scroll steps
+
+[fullpage]
+viewport_width = 1440    # browser width the page is rendered at
+timeout_seconds = 60     # give up waiting for slow pages (captures what loaded)
+settle_ms = 1500         # extra wait after load for lazy images/animations

@@ -1,0 +1,8 @@
+keyboard==0.13.5
+mss==10.2.0
+numpy==2.5.1
+Pillow==12.3.0
+pystray==0.19.5
+pywin32==312
+pyperclip==1.11.0
+playwright==1.61.0
