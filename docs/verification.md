@@ -1,5 +1,16 @@
 # Release verification
 
+## 0.1.1 · October 16, 2026
+
+27 default tests and all nine controlled native desktop checks passed. The runtime lock passed its advisory audit. Capture, save, clipboard and installer behavior are unchanged.
+
+The implemented gold theme was compared with the approved native previews at normal and constrained sizes, including populated, empty, hover, focus and error states where applicable. Actions are gold with white labels; links and dark-surface focus are light gold; surfaces and selections are neutral gray. White on gold is an approved visual exception, not a claim of AA small-text contrast. Full screen-reader, high-contrast and mixed-DPI support remain unverified.
+
+Release assets are built from the exact commit, with hosted checks, exported-tree/history secret scans and an unauthenticated SHA-256 download check recorded in the versioned release notes. Existing personal installations are not modified.
+
+## Previous release evidence
+
+
 ## 0.1.0
 
 Local verification: October 15, 2026, Windows 11 x64, Python 3.12.

@@ -8,7 +8,7 @@ from tkinter import messagebox
 from PIL import Image, ImageDraw, ImageFilter, ImageTk
 
 import save
-from theme import ACCENT, MARKUP, button_style
+from theme import MARKUP, SELECTED, button_style
 from theme import ROW as PANEL
 from theme import SURFACE as INK
 from theme import TEXT as PAPER
@@ -170,7 +170,7 @@ class Annotator:
         self.tool = name
         for n, b in self.tool_buttons.items():
             b.configure(
-                bg=ACCENT if n == name else PANEL,
+                bg=SELECTED if n == name else PANEL,
                 fg=INK if n == name else PAPER,
                 relief="sunken" if n == name else "flat",
             )

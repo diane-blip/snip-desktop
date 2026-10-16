@@ -2,7 +2,7 @@
 
 A Windows tray tool for screenshots, scrolling captures and full web pages. Save a PNG, copy it to the clipboard, and add arrows, boxes, blur or opaque redaction.
 
-**[Download Snip 0.1.0](https://github.com/diane-blip/snip-desktop/releases/tag/v0.1.0)** · Windows x64 · Python 3.12 · MIT license
+**[Download Snip 0.1.1](https://github.com/diane-blip/snip-desktop/releases/tag/v0.1.1)** · Windows x64 · Python 3.12 · MIT license
 
 This is a source release with a setup script. It requires Python and downloads its dependencies and a separate Chromium browser. There is no standalone executable or macOS build.
 
@@ -11,13 +11,13 @@ This is a source release with a setup script. It requires Python and downloads i
 ## Install
 
 1. Install **64-bit Python 3.12** from [python.org](https://www.python.org/downloads/windows/), including the Python launcher and Tcl/Tk.
-2. Download `Snip-0.1.0-source.zip` and `SHA256SUMS.txt` from the release. Check the ZIP's SHA-256 against the published file:
+2. Download `Snip-0.1.1-source.zip` and `SHA256SUMS.txt` from the release. Check the ZIP's SHA-256 against the published file:
 
    ```powershell
-   Get-FileHash .\Snip-0.1.0-source.zip -Algorithm SHA256
+   Get-FileHash .\Snip-0.1.1-source.zip -Algorithm SHA256
    ```
 
-3. Extract the ZIP to a permanent, writable folder. Open PowerShell in the extracted `Snip-0.1.0` folder and run:
+3. Extract the ZIP to a permanent, writable folder. Open PowerShell in the extracted `Snip-0.1.1` folder and run:
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-machine.ps1

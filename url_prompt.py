@@ -36,7 +36,7 @@ class URLPrompt:
         )
         self.entry.pack(fill="x", ipady=7)
         self.error = tk.Label(
-            self.top, text="", bg=SURFACE, fg=ACCENT, font=("Segoe UI", 10), anchor="w"
+            self.top, text="", bg=SURFACE, fg=TEXT, font=("Segoe UI", 10), anchor="w"
         )
         self.error.pack(fill="x", pady=(5, 12))
         buttons = tk.Frame(self.top, bg=SURFACE)

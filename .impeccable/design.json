@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T21:24:56.2968614-05:00",
+  "generatedAt": "2026-10-16T16:55:11.397509+00:00",
   "title": "Design System: Snip",
   "extensions": {
     "platform": "Windows / Python Tkinter",
@@ -36,15 +36,31 @@
       },
       "accent": {
         "role": "primary",
-        "displayName": "Pale teal"
+        "displayName": "Light-gold focus and outline"
       },
       "markup": {
-        "role": "secondary",
-        "displayName": "Annotation blue"
+        "role": "neutral",
+        "displayName": "Charcoal annotation"
       },
       "redaction": {
         "role": "neutral",
         "displayName": "Opaque redaction black"
+      },
+      "action": {
+        "role": "primary",
+        "displayName": "SRC gold action"
+      },
+      "action-hover": {
+        "role": "primary",
+        "displayName": "Gold button hover"
+      },
+      "action-text": {
+        "role": "neutral",
+        "displayName": "White action label"
+      },
+      "selected": {
+        "role": "neutral",
+        "displayName": "Selected tool gray"
       }
     },
     "typographyMeta": {
@@ -74,7 +90,7 @@
     "breakpoints": [],
     "nativeConventions": {
       "units": "Tk positive font sizes are points; geometry, padding and highlight thickness are pixels. Actual rendering depends on Windows/Tk scaling.",
-      "buttonFocus": "takefocus=True; highlightthickness=2; highlightcolor=ACCENT; highlightbackground=SURFACE",
+      "buttonFocus": "takefocus=True; highlightthickness=2; light-gold focus; primary buttons keep a light-gold edge.",
       "buttonRelief": "flat, borderwidth=0; selected annotation tool uses sunken relief",
       "urlReturn": "Entry and Capture submit; focused Cancel cancels. Escape cancels.",
       "editorNavigation": "Both native scrollbars; canvasx/canvasy preserve drawing coordinates after scrolling. Ctrl+Z, Ctrl+S and Escape are bound.",
@@ -94,8 +110,10 @@
         ".impeccable/review/annotator-narrow.png",
         ".impeccable/review/region.png"
       ],
-      "checked": "Read the listed implementation files and inspected all eight supplied captures. Source includes horizontal editor scrolling with canvas-relative coordinates and distinct Return bindings for URL Cancel and Capture. This documentation is not a new finish-review disposition."
-    }
+      "checked": "Existing captures document retained geometry and interactions. The current palette was checked against theme.py, annotate.py, region.py, url_prompt.py and the approved gold previews; this refresh is not a new finish-review disposition."
+    },
+    "contrastException": "White labels on solid gold retain the approved brand exception. This pairing does not establish ordinary small-text contrast compliance.",
+    "documentationEvidence": "Refreshed against the implemented gold theme source and approved native gold previews. This is documentation of the approved palette and retained behavior, not accessibility certification."
   },
   "components": [
     {
@@ -108,7 +126,7 @@
       "name": "Primary button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Native teal Capture or Save button; label names the operation."
+      "description": "Native gold Capture or Save button with a white label, darker-gold active fill and light-gold edge."
     },
     {
       "name": "URL field",
@@ -120,7 +138,7 @@
       "name": "Selected annotation tool",
       "kind": "button",
       "refersTo": "tool-selected",
-      "description": "Teal fill plus sunken relief identify the current Arrow, Box, Blur or Redact tool."
+      "description": "Light-gray fill, dark text and sunken relief identify the current Arrow, Box, Blur or Redact tool."
     },
     {
       "name": "Capture palette",
@@ -140,12 +158,12 @@
   ],
   "narrative": {
     "northStar": "Native Windows, task first",
-    "overview": "Dark neutral surfaces, white text and restrained teal/blue support capture and annotation. Segoe UI, labeled controls and visible focus carry the interface. This is a Windows Tkinter app; native window chrome and scrollbars remain platform controls.",
+    "overview": "Dark neutral surfaces, white text and SRC gold actions share the approved theme with Silent Type and Dictate. Segoe UI, labeled controls and visible focus retain the native Windows workflow.",
     "keyCharacteristics": [
-      "Compact, rectangular controls.",
-      "Teal identifies primary actions, selected tools and keyboard focus.",
-      "Blue marks annotations; captured images retain their own colors.",
-      "No personal or Sway Rise Creative branding."
+      "Compact rectangular controls",
+      "Gold primary actions and light-gold focus",
+      "Gray selected tools",
+      "Charcoal annotations; captured images retain their colors"
     ],
     "rules": [],
     "dos": [
@@ -155,7 +173,6 @@
       "Do retain the captured image's colors and distinguish Blur from Redact in text."
     ],
     "donts": [
-      "Don't introduce personal or SRC branding.",
       "Don't add decorative fonts, gradients or bespoke window chrome.",
       "Don't let a dialog-wide Return handler override the focused Cancel button.",
       "Don't describe native Tk behavior as HTML/CSS or claim untested accessibility compliance."

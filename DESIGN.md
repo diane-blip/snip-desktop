@@ -2,13 +2,17 @@
 name: Snip
 description: Native Windows capture and annotation utility.
 colors:
-  surface: "#181B1E"
-  row: "#24292E"
-  hover: "#323A41"
-  text: "#F5F7F8"
-  muted: "#B3BDC5"
-  accent: "#90D5CF"
-  markup: "#2563A6"
+  surface: "#171717"
+  row: "#252525"
+  hover: "#333333"
+  text: "#F5F5F5"
+  muted: "#B8B8B8"
+  accent: "#E8DBBE"
+  action: "#AD8326"
+  action-hover: "#8A6820"
+  action-text: "#FFFFFF"
+  selected: "#E8E8E8"
+  markup: "#404040"
   redaction: "#000000"
 typography:
   title:
@@ -48,11 +52,14 @@ components:
     rounded: "{rounded.control}"
     padding: "7px 12px"
   button-primary:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.surface}"
+    backgroundColor: "{colors.action}"
+    textColor: "{colors.action-text}"
     typography: "{typography.body}"
     rounded: "{rounded.control}"
     padding: "7px 12px"
+  button-primary-hover:
+    backgroundColor: "{colors.action-hover}"
+    textColor: "{colors.action-text}"
   button-active:
     backgroundColor: "{colors.hover}"
     textColor: "{colors.text}"
@@ -62,7 +69,7 @@ components:
     typography: "{typography.input}"
     rounded: "{rounded.control}"
   tool-selected:
-    backgroundColor: "{colors.accent}"
+    backgroundColor: "{colors.selected}"
     textColor: "{colors.surface}"
 ---
 
@@ -72,23 +79,24 @@ components:
 
 **Creative North Star: "Native Windows, task first"**
 
-Dark neutral surfaces, white text and restrained teal/blue support capture and annotation. Segoe UI, labeled controls and visible focus carry the interface. This is a Windows Tkinter app; native window chrome and scrollbars remain platform controls.
+Dark neutral surfaces, white text and SRC gold actions share the approved theme with Silent Type and Dictate. Segoe UI, labeled controls and visible focus carry the interface. This is a Windows Tkinter app; native window chrome and scrollbars remain platform controls.
 
 **Key Characteristics:**
 - Compact, rectangular controls.
-- Teal identifies primary actions, selected tools and keyboard focus.
-- Blue marks annotations; captured images retain their own colors.
-- No personal or Sway Rise Creative branding.
+- Gold identifies primary actions; light gold marks focus and selection outlines.
+- Selected tools use gray. Charcoal marks annotations; captured images retain their own colors.
 
 ## Colors
 
 ### Primary
 
-`accent` is pale teal for primary buttons, selected tools, focus highlights, selection outlines, dimensions and URL validation text. URL errors use explanatory text as well as color.
+Gold action fills Capture and Save, with white labels and darker-gold hover. Light-gold accent supplies dark-surface focus, primary-button edges, region outlines and dimensions. Selected tools use light gray with dark text. URL errors use ordinary text and explanatory wording.
 
-### Secondary
+White labels on solid gold retain the approved brand exception. This pairing does not establish ordinary small-text contrast compliance.
 
-`markup` is blue for arrows, boxes and drawing previews. `redaction` is opaque black applied to image pixels.
+### Annotation
+
+`markup` is charcoal for arrows, boxes and drawing previews. `redaction` is opaque black applied to image pixels.
 
 ### Neutral
 
@@ -130,7 +138,7 @@ Application-drawn controls and selections are rectangular. Buttons have flat rel
 
 ### Buttons
 
-Secondary actions use `button`; Capture and Save use `button-primary`. Native active state uses `button-active`. All shared buttons accept keyboard focus, use a hand cursor and show an accent focus highlight against the surrounding surface. Their 12px/7px padding supplements Tk's text and highlight geometry; it is not a fixed target size.
+Secondary actions use `button`; Capture and Save use `button-primary`. Secondary active state uses `button-active`; primary active state uses `button-primary-hover`. All shared buttons accept keyboard focus, use a hand cursor and show an accent focus highlight against the surrounding surface. Their 12px/7px padding supplements Tk's text and highlight geometry; it is not a fixed target size.
 
 ### Capture palette
 
@@ -157,13 +165,13 @@ These are implemented focus, keyboard and error conventions, not a claim of scre
 ## Do's and Don'ts
 
 ### Do:
+- **Do** retain gold actions, gray selected tools and charcoal annotation strokes.
 - **Do** reuse the shared theme and button styles.
 - **Do** preserve labeled actions, visible focus and keyboard cancellation.
 - **Do** keep the image accessible through both scrollbars when the editor is narrowed.
 - **Do** retain the captured image's colors and distinguish Blur from Redact in text.
 
 ### Don't:
-- **Don't** introduce personal or SRC branding.
 - **Don't** add decorative fonts, gradients or bespoke window chrome.
 - **Don't** let a dialog-wide Return handler override the focused Cancel button.
 - **Don't** describe native Tk behavior as HTML/CSS or claim untested accessibility compliance.
