@@ -1,0 +1,43 @@
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install from documented setup
+        shell: pwsh
+        run: ./setup-machine.ps1 -Python (Get-Command python).Source
+      - name: Install locked development tools
+        run: |
+          ./.venv/Scripts/python.exe -m pip install --only-binary=:all: --require-hashes -r requirements-dev.txt
+      - run: ./.venv/Scripts/python.exe -m pip check
+      - run: ./.venv/Scripts/ruff.exe check .
+      - run: ./.venv/Scripts/ruff.exe format --check .
+      - name: Windows regressions and real Chromium captures
+        run: ./.venv/Scripts/python.exe -m unittest discover -s tests -v
+      - name: Audit runtime dependencies
+        run: ./.venv/Scripts/pip-audit.exe --require-hashes -r requirements.lock
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          Get-ChildItem -Filter '*.ps1' | ForEach-Object {
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors)
+            if ($parseErrors) { throw $parseErrors }
+          }
