@@ -1,6 +1,6 @@
 # Security and privacy
 
-Report a vulnerability through [GitHub private vulnerability reporting](https://github.com/diane-blip/snip-desktop/security/advisories/new). Do not put sensitive examples in a public issue. Include the affected version, a minimal fictional reproduction and expected impact. Security fixes target the latest release; no response-time guarantee is offered.
+Report a vulnerability through [GitHub private vulnerability reporting](https://github.com/dianewhiddon/snip-desktop/security/advisories/new). Do not put sensitive examples in a public issue. Include the affected version, a minimal fictional reproduction and expected impact. Security fixes target the latest release; no response-time guarantee is offered.
 
 ## Data handling
 

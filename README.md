@@ -2,7 +2,7 @@
 
 A Windows tray tool for screenshots, scrolling captures and full web pages. Save a PNG, copy it to the clipboard, and add arrows, boxes, blur or opaque redaction.
 
-**[Download Snip 0.1.1](https://github.com/diane-blip/snip-desktop/releases/tag/v0.1.1)** · Windows x64 · Python 3.12 · MIT license
+**[Download Snip 0.1.1](https://github.com/dianewhiddon/snip-desktop/releases/tag/v0.1.1)** · Windows x64 · Python 3.12 · MIT license
 
 This is a source release with a setup script. It requires Python and downloads its dependencies and a separate Chromium browser. There is no standalone executable or macOS build.
 
